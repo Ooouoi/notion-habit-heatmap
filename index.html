@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月度打卡热力图</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  background: #f7f6f3;
+  color: #37352f;
+  padding: 28px 24px 40px;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #37352f;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+select {
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  color: #37352f;
+  cursor: pointer;
+  outline: none;
+}
+
+button {
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px 14px;
+  background: #fff;
+  color: #37352f;
+  cursor: pointer;
+  outline: none;
+}
+button:hover { background: #f0efec; }
+button.red { color: #d44; border-color: #f5c0c0; }
+button.red:hover { background: #fff0f0; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e4e0;
+  border-radius: 12px;
+  padding: 20px 22px 22px;
+  margin-bottom: 18px;
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 100%;
+}
+
+thead th {
+  color: #aaa;
+  font-weight: 500;
+  padding: 4px 3px;
+  text-align: center;
+  min-width: 26px;
+  font-size: 11px;
+}
+
+.row-label {
+  text-align: right;
+  padding: 5px 14px 5px 0;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 88px;
+  cursor: default;
+  user-select: none;
+}
+
+.cell-td { padding: 3px 3px; text-align: center; }
+
+.cell {
+  display: inline-block;
+  width: 22px;
+  height: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.cell:hover { transform: scale(1.3); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0efec;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #888;
+}
+.legend-dot { width: 13px; height: 13px; border-radius: 3px; }
+
+.stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.stat {
+  background: #fff;
+  border: 1px solid #e5e4e0;
+  border-radius: 10px;
+  padding: 12px 18px;
+  min-width: 110px;
+}
+.stat-label { font-size: 11px; color: #aaa; margin-bottom: 5px; }
+.stat-value { font-size: 22px; font-weight: 700; }
+
+.tip { font-size: 11px; color: #bbb; margin-top: 10px; }
+
+/* Modal */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.overlay.show { display: flex; }
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 26px;
+  width: 300px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+}
+.modal h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+.modal input {
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  padding: 8px 11px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  outline: none;
+  color: #37352f;
+}
+.modal input:focus { border-color: #a89cff; }
+.color-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.cp {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: border-color 0.1s;
+}
+.cp.active { border-color: #37352f; }
+.modal-btns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.modal-btns button { padding: 7px 18px; }
+.modal-btns button.primary {
+  background: #37352f;
+  color: #fff;
+  border-color: #37352f;
+}
+.modal-btns button.primary:hover { background: #1a1916; }
+</style>
+</head>
+<body>
+
+<h1>Monthly Heatmap · 月度打卡热力图</h1>
+
+<div class="controls">
+  <select id="sel-month"></select>
+  <button onclick="openModal()">＋ 添加习惯</button>
+  <button class="red" onclick="confirmClear()">清空本月</button>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="card">
+  <table id="tbl"></table>
+  <div class="legend" id="legend"></div>
+  <div class="tip">· 点击色块打卡 / 再次点击取消 &nbsp;·&nbsp; 右键习惯名称删除</div>
+</div>
+
+<div class="overlay" id="overlay" onclick="overlayClick(event)">
+  <div class="modal">
+    <h2>添加新习惯</h2>
+    <input id="habit-name" type="text" placeholder="输入习惯名称（最多8字）" maxlength="8">
+    <div class="color-grid" id="color-grid"></div>
+    <div class="modal-btns">
+      <button onclick="closeModal()">取消</button>
+      <button class="primary" onclick="addHabit()">添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var COLORS = [
+  {c:"#F0A500",bg:"#FFF3CC"},
+  {c:"#E05C8A",bg:"#FFE8F2"},
+  {c:"#3BAD6F",bg:"#D6F5E3"},
+  {c:"#3E9CE8",bg:"#D6EDFF"},
+  {c:"#B57BFF",bg:"#EEE0FF"},
+  {c:"#E05C5C",bg:"#FFE0E0"},
+  {c:"#444",   bg:"#EBEBEB"},
+  {c:"#E07A3B",bg:"#FFE8D6"},
+  {c:"#0DA39C",bg:"#D5F5F3"},
+];
+
+var selColor = 0;
+var yr, mo;
+
+function SK(y,m){ return "hm_data_"+y+"_"+m; }
+function HK(){ return "hm_habits"; }
+
+function getHabits(){
+  try{ var v=localStorage.getItem(HK()); return v?JSON.parse(v):defHabits(); }
+  catch(e){ return defHabits(); }
+}
+function defHabits(){
+  return [
+    {name:"空腹有氧",ci:0},
+    {name:"每日阅读",ci:6},
+    {name:"喝奶茶",  ci:1},
+    {name:"点外卖",  ci:2},
+    {name:"自媒体",  ci:4},
+    {name:"力量训练",ci:3},
+    {name:"熬夜",    ci:5},
+  ];
+}
+function setHabits(h){ localStorage.setItem(HK(),JSON.stringify(h)); }
+
+function getData(y,m){
+  try{ var v=localStorage.getItem(SK(y,m)); return v?JSON.parse(v):{}; }
+  catch(e){ return {}; }
+}
+function setData(y,m,d){ localStorage.setItem(SK(y,m),JSON.stringify(d)); }
+
+function daysIn(y,m){ return new Date(y,m,0).getDate(); }
+
+function initMonthSel(){
+  var sel=document.getElementById("sel-month");
+  sel.innerHTML="";
+  var now=new Date();
+  for(var i=-4;i<=1;i++){
+    var d=new Date(now.getFullYear(),now.getMonth()+i,1);
+    var y=d.getFullYear(), m=d.getMonth()+1;
+    var o=document.createElement("option");
+    o.value=y+"-"+m;
+    o.text=y+"年"+(m<10?"0"+m:m)+"月";
+    if(y===now.getFullYear()&&m===now.getMonth()+1){
+      o.selected=true; yr=y; mo=m;
+    }
+    sel.appendChild(o);
+  }
+  sel.onchange=function(){
+    var v=this.value.split("-");
+    yr=parseInt(v[0]); mo=parseInt(v[1]);
+    draw();
+  };
+}
+
+function draw(){
+  drawTable();
+  drawLegend();
+  drawStats();
+}
+
+function drawTable(){
+  var habits=getHabits();
+  var data=getData(yr,mo);
+  var days=daysIn(yr,mo);
+  var tbl=document.getElementById("tbl");
+  tbl.innerHTML="";
+
+  // header
+  var htr=document.createElement("tr");
+  var th0=document.createElement("th");
+  htr.appendChild(th0);
+  for(var d=1;d<=days;d++){
+    var th=document.createElement("th");
+    th.textContent=d<10?"0"+d:""+d;
+    htr.appendChild(th);
+  }
+  var thead=document.createElement("thead");
+  thead.appendChild(htr);
+  tbl.appendChild(thead);
+
+  // body
+  var tbody=document.createElement("tbody");
+  for(var hi=0;hi<habits.length;hi++){
+    (function(hi){
+      var h=habits[hi];
+      var pal=COLORS[h.ci%COLORS.length];
+      var tr=document.createElement("tr");
+
+      var td0=document.createElement("td");
+      td0.className="row-label";
+      td0.style.color=pal.c;
+      td0.textContent=h.name;
+      td0.title="右键删除此习惯";
+      td0.oncontextmenu=function(e){
+        e.preventDefault();
+        delHabit(hi);
+      };
+      tr.appendChild(td0);
+
+      for(var d=1;d<=days;d++){
+        (function(d){
+          var td=document.createElement("td");
+          td.className="cell-td";
+          var key=hi+"_"+d;
+          var on=!!data[key];
+          var span=document.createElement("span");
+          span.className="cell";
+          span.style.background=on?pal.c:pal.bg;
+          span.title=(on?"✓ 已打卡":"未打卡")+" · "+h.name+" 第"+d+"天";
+          span.onclick=function(){
+            var dd=getData(yr,mo);
+            if(dd[key]) delete dd[key]; else dd[key]=1;
+            setData(yr,mo,dd);
+            draw();
+          };
+          td.appendChild(span);
+          tr.appendChild(td);
+        })(d);
+      }
+      tbody.appendChild(tr);
+    })(hi);
+  }
+  tbl.appendChild(tbody);
+}
+
+function drawLegend(){
+  var habits=getHabits();
+  var lg=document.getElementById("legend");
+  lg.innerHTML="";
+  for(var i=0;i<habits.length;i++){
+    var h=habits[i];
+    var pal=COLORS[h.ci%COLORS.length];
+    var div=document.createElement("div");
+    div.className="legend-item";
+    div.innerHTML='<div class="legend-dot" style="background:'+pal.c+'"></div>'+h.name;
+    lg.appendChild(div);
+  }
+}
+
+function drawStats(){
+  var habits=getHabits();
+  var data=getData(yr,mo);
+  var days=daysIn(yr,mo);
+  var now=new Date();
+  var isCur=(yr===now.getFullYear()&&mo===now.getMonth()+1);
+  var sofar=isCur?now.getDate():days;
+
+  var total=0, possible=habits.length*sofar;
+  for(var hi=0;hi<habits.length;hi++){
+    for(var d=1;d<=sofar;d++){
+      if(data[hi+"_"+d]) total++;
+    }
+  }
+  var rate=possible>0?Math.round(total/possible*100):0;
+
+  var best="-", bestN=0;
+  for(var hi=0;hi<habits.length;hi++){
+    var cnt=0;
+    for(var d=1;d<=sofar;d++){ if(data[hi+"_"+d]) cnt++; }
+    if(cnt>bestN){ bestN=cnt; best=habits[hi].name; }
+  }
+
+  var streak=0;
+  outer: for(var d=sofar;d>=1;d--){
+    for(var hi=0;hi<habits.length;hi++){
+      if(!data[hi+"_"+d]) break outer;
+    }
+    streak++;
+  }
+
+  var el=document.getElementById("stats");
+  el.innerHTML=
+    stat("本月打卡率", rate+"%", "#3BAD6F")+
+    stat("打卡总次数", total, "#37352f")+
+    stat("最佳习惯",   best,  "#37352f", "15px")+
+    stat("全勤连续",   streak+"天", "#F0A500");
+}
+
+function stat(label,val,color,fs){
+  return '<div class="stat"><div class="stat-label">'+label+'</div><div class="stat-value" style="color:'+color+';font-size:'+(fs||"22px")+'">'+val+'</div></div>';
+}
+
+function delHabit(hi){
+  var habits=getHabits();
+  if(!confirm("确定删除习惯「"+habits[hi].name+"」吗？")) return;
+  habits.splice(hi,1);
+  setHabits(habits);
+  draw();
+}
+
+function confirmClear(){
+  if(!confirm("确定清空 "+yr+"年"+mo+"月 的所有打卡记录？")) return;
+  localStorage.removeItem(SK(yr,mo));
+  draw();
+}
+
+// Modal
+function openModal(){
+  selColor=0;
+  document.getElementById("habit-name").value="";
+  var grid=document.getElementById("color-grid");
+  grid.innerHTML="";
+  for(var i=0;i<COLORS.length;i++){
+    (function(i){
+      var d=document.createElement("div");
+      d.className="cp"+(i===0?" active":"");
+      d.style.background=COLORS[i].c;
+      d.onclick=function(){
+        selColor=i;
+        var all=document.querySelectorAll(".cp");
+        for(var j=0;j<all.length;j++) all[j].classList.remove("active");
+        this.classList.add("active");
+      };
+      grid.appendChild(d);
+    })(i);
+  }
+  document.getElementById("overlay").classList.add("show");
+  setTimeout(function(){ document.getElementById("habit-name").focus(); },60);
+}
+
+function closeModal(){
+  document.getElementById("overlay").classList.remove("show");
+}
+
+function overlayClick(e){
+  if(e.target===document.getElementById("overlay")) closeModal();
+}
+
+function addHabit(){
+  var name=document.getElementById("habit-name").value.trim();
+  if(!name){ document.getElementById("habit-name").focus(); return; }
+  var habits=getHabits();
+  habits.push({name:name, ci:selColor});
+  setHabits(habits);
+  closeModal();
+  draw();
+}
+
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape") closeModal();
+  if(e.key==="Enter"&&document.getElementById("overlay").classList.contains("show")) addHabit();
+});
+
+initMonthSel();
+draw();
+</script>
+</body>
+</html>
