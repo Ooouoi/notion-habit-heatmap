@@ -383,14 +383,14 @@ function stat(label,val,color,fs){
 
 function delHabit(hi){
   var habits=getHabits();
-  if(!confirm("确定删除习惯「"+habits[hi].name+"」吗？")) return;
+  
   habits.splice(hi,1);
   setHabits(habits);
   draw();
 }
 
 function confirmClear(){
-  if(!confirm("确定清空 2026年"+mo+"月 的所有打卡记录？")) return;
+  
   localStorage.removeItem(SK(yr,mo));
   draw();
 }
